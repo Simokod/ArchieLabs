@@ -5,11 +5,12 @@
 int main(int argc, char **argv) 
 {
     // args params
-    int i, j, isDebug=0, isEncrpt=0, isPlus=0, isRead=0;  
+    int i, j, isDebug=0, isEncrpt=0, isPlus=0;  
     // encrypt params
     int encIndex=2, encArgIndex;
     // reading parameters
-    int readArgIndex;
+    FILE *readInput = stdin;
+    char *fileName, *first, *last;
 
     int c;
     // param check
@@ -30,29 +31,32 @@ int main(int argc, char **argv)
             isEncrpt = 1;
             encArgIndex = i;
         }
-        if(strncmp(argc[i],"-i",2)==0){
-            isRead = 1;
-            readArgIndex = i;
+        if(strncmp(argv[i],"-i",2)==0){
+            fileName = calloc(strlen(argv[i]-2), sizeof(char));
+            first = &argv[i][2];
+            last = &argv[i][strlen(argv[i])];
+            strncpy(fileName, first, last-first);
+            readInput = fopen(fileName, "r");
         }
     }
 
-    c = fgetc(stdin);
+    c = fgetc(readInput);
     while(c!=EOF) {
         if(isDebug){
-            fprintf(stderr, "0x%x\t", c);
+            fprintf(stderr, "%#02x\t", c);
         }
 
         if(isEncrpt){   // encryption
             if(isPlus){ // +e
                 fputc(c + argv[encArgIndex][encIndex], stdout);
                 if(isDebug){
-                    fprintf(stderr, "0x%x\n", c+argv[encArgIndex][encIndex]);
+                    fprintf(stderr, "%#02x\n", c+argv[encArgIndex][encIndex]);
                 }
             }
             else {  // -e
                 fputc(c - argv[encArgIndex][encIndex], stdout);
                 if(isDebug)
-                    fprintf(stderr, "0x%x\n", c-argv[encArgIndex][encIndex]);
+                    fprintf(stderr, "%#02x\n", c-argv[encArgIndex][encIndex]);
             }
 
             ++encIndex;
@@ -67,17 +71,22 @@ int main(int argc, char **argv)
         else{       // no encryption
             if((c>='A') & (c<='Z')){
                 if(isDebug){
-                    fprintf(stderr, "0x%x\n", c+'a'-'A');
+                    fprintf(stderr, "%#02x\n", c+'a'-'A');
                 }
                 fputc(c+'a'-'A', stdout);
             }
             else {
                 if(isDebug){
-                    fprintf(stderr, "0x%x\n", c);
+                    fprintf(stderr, "%#02x\n", c);
                 }
                 fputc(c, stdout);
             }
         }
-        c=fgetc(stdin);
+        c=fgetc(readInput);
     }
+    fclose(readInput);
+    free(readInput);
+    free(fileName);
+    free(first);
+    free(last);
 }
