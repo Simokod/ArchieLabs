@@ -1,13 +1,13 @@
  
-all: encoder
+all: arrP
 
-encoder: encoder.o
-	gcc -m32 -g -Wall -o encoder encoder.o
+arrP: arrP.o
+	gcc -m32 -g -Wall -o arrP arrP.c
 	
-encoder.o: encoder.c
-	gcc -g -Wall -m32 -c -o encoder.o encoder.c
+arrP.o: arrP.c
+	gcc -g -Wall -m32 -c -o arrP.o arrP.c
 	
 .PHONY: clean
 
 clean:
-	rm -f *.o encoder
+	rm -f *.o arrP
