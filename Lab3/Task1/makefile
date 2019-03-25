@@ -1,12 +1,12 @@
 
-all: virus
+all: virusDetector
 
-virus : virus.o
-	gcc -g -W -m32 -o virus virus.o
+virusDetector : virusDetector.o
+	gcc -g -W -m32 -o virusDetector virusDetector.o
 
-virus.o : virus.c
-	gcc -g -W -m32 -c -o virus.o virus.c
+virusDetector.o : virusDetector.c
+	gcc -g -W -m32 -c -o virusDetector.o virusDetector.c
 
 .PHONY : clean
 clean : 
-	rm -f *.o virus
+	rm -f *.o virusDetector
