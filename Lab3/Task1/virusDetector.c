@@ -123,7 +123,7 @@ void detect_viruses(char *buffer, unsigned int size){
 		virus_list = Gvirus_list;
 		while(virus_list != NULL){
 			if(memcmp(&buffer[i], virus_list-> vir-> sig, virus_list-> vir-> SigSize) == 0)
-				printf("Starting byte: %02X, Virus name: %s, Virus size: %d\n", i,virus_list-> vir-> virusName, virus_list-> vir-> SigSize);
+				printf("Starting byte: %d, Virus name: %s, Virus size: %d\n", i,virus_list-> vir-> virusName, virus_list-> vir-> SigSize);
 			virus_list = virus_list-> nextVirus;
 		}
 	}
@@ -150,7 +150,7 @@ void kill_virus(char *fileName, int signitureOffset, int signitureSize){
 		NOP_str[i] = 0x90;
 	file = fopen(fileName, "r+");
 	fseek(file, signitureOffset, SEEK_SET);
-	fwrite(NOP_str, sizeof(0x90), signitureSize, file);
+	fwrite(NOP_str, sizeof(char), signitureSize, file);
 	fclose(file);
 }
 // fixing the file
