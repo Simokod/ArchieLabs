@@ -17,6 +17,7 @@ section .data
 	num_of_ops: dd 0				; total number of operations
 	new_link_address: dd 0			; saving the current number last link address
 	link_counter: dd 0				; counter for the amount of link
+	leading_zero_flag: db 0			; flag for leading zero links
 
 section .text
   	align 16
@@ -136,11 +137,11 @@ switch:
 				dec dword [current_size]			; removing number of arguments in the stack
 				jmp main_loop
 
-
-	; eax - address of current link, ebx - address of next link, ecx - value of link, 
+	; create a copy of the number at the top of the stack and push it to the stack
+	; eax - address of current link, ebx - address of next link, ecx - value of link
 
 		duplicate:
-			inc dword [num_of_ops]
+			inc dword [num_of_ops]			; increasing number of operations done
 			cmp dword [current_size], 0		; making sure there is at least one number in the stack
 			je .not_enough_operands			; if not - send error
 			cmp dword [current_size], 4		; making sure there is enough room for the duplicate
@@ -152,7 +153,7 @@ switch:
 			call print_rator_error			; not enough operands error
 			jmp main_loop
 
-			start_duplicate:
+		start_duplicate:
 			mov ebx, dword [current_size] 	; for memory computation
 			mov eax, dword [stack+ebx*4-4]	; saving address of first link
 
@@ -213,6 +214,43 @@ switch:
 					inc dword [current_size]
 					jmp main_loop
 
+	; prints the amount of '1' bits in the number at the top of the stack
+		one_bits:
+			inc dword [num_of_ops]			; increasing number of operations done
+			cmp dword [current_size], 0		; making sure there is at least one number in the stack
+			je .not_enough_operands			; if not - send error
+			jmp count_bits
+
+		.not_enough_operands:
+			call print_rator_error			; not enough operands error
+			jmp main_loop
+
+		count_bits:
+			mov ebx, dword [current_size] 	; for memory computation
+			mov eax, dword [stack+ebx*4-4]	; saving address of first link
+
+			.loop:
+
+				mov edx, 8					; initiallizing edx to 8 for shr operations
+				mov ecx, 0					; zeroing ecx
+				mov cl, byte [eax]			; extracting actual number	
+
+				count_bits_loop:
+					shr ecx, 1 					; shr ecx in order to count '1' bits
+					add eax, 1
+					jmp count_bits_loop
+
+
+
+
+
+
+
+
+
+
+
+
 		operand:
 			cmp dword [current_size], stack_capacity		; checking if stack is full
 			jne read_operand
@@ -228,7 +266,8 @@ switch:
 			mov ebx, [current_size]					; putting current_size in ebx for memory addition
 			mov dword [stack+ebx*4], eax			; storing pointer to linked list in the stack
 
-			mov ecx, 0					; initiallizing ecx as input index
+			mov ecx, 0							; initiallizing ecx as input index
+			mov byte [leading_zero_flag], 1		; initiallizing flag to true
 
 			operand_loop:
 				mov edx, 0					; zeroing edx
@@ -254,7 +293,17 @@ switch:
 				add dl, byte [buffer+ecx+1]	; moving current numbers to edx
 				sub dx, '0'					; turning to number from ascii
 
+				cmp dl, 0						; checking if the whole number is 0
+				jne enter_to_link				; if not - continue normally
+				cmp byte [leading_zero_flag], 0	; check if there are leading zeros
+				je enter_to_link				; if not - continue normally
+
+				inc ecx 					; increase input index
+				inc ecx 
+				jmp operand_loop 			; continue reading
+
 			enter_to_link:
+				mov byte [leading_zero_flag], 0	; no leading zeros from this point
 				mov byte [eax], dl				; storing current numbers in the linked list
 
 				inc ecx							; increasing index of input buffer
@@ -314,6 +363,8 @@ switch:
 			popad
 			ret
 
+;		pop_operand_stack:
+
 		q_case:
 			popad 						; restore registers
 																; TODO: free allocated memory
@@ -321,4 +372,5 @@ switch:
 			mov esp, ebp 				; freeing func AF
 			pop ebp 					; restore AF of main
 			ret
+
 
