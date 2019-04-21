@@ -18,6 +18,7 @@ section .data
 	new_link_address: dd 0			; saving the current number last link address
 	link_counter: dd 0				; counter for the amount of link
 	leading_zero_flag: db 0			; flag for leading zero links
+	first_link_flag: db 0			; flag for printing the first link
 
 section .text
   	align 16
@@ -89,7 +90,7 @@ switch:
 			jmp main_loop
 
 		before_pop:
-
+			mov byte [first_link_flag], 1	; initiallizing flag to true
 			mov ebx, dword [current_size] 	; for memory computation
 			mov eax, dword [stack+ebx*4-4]	; saving address of first link
 
@@ -110,8 +111,10 @@ switch:
 				mov eax, ebx				; moving address of next link to eax
 				jmp .pop 					; continuing loop
 			print:
-				cmp dword [esp], 10					; checking if the link has a first digit zero
+				cmp dword [esp], 16					; checking if the link has a first digit zero
 				jge actual_print					; if not - print as normal
+				cmp byte [first_link_flag], 1		; checking if it is the first link
+				je actual_print						; if yes - print without zero
 				cmp dword [link_counter], 1			; check if last link
 				jne zero_print						; if not - print as normal
 				mov ebx, dword [current_size]		; for memory access computation management purposes
@@ -119,17 +122,18 @@ switch:
 				jne actual_print
 
 			zero_print:
-				push 0					
+				push 0						
 				push format_hex				; print a zero before the digit
 				call printf
 				add esp, 8
 
 			actual_print:
-				push format_hex		   		; pushing number format
-				call printf					; printing the number
-				add esp, 8					; removing the format arg and one number
+				mov byte [first_link_flag], 0 	; falsing first link flag after first print 
+				push format_hex		   			; pushing number format
+				call printf						; printing the number
+				add esp, 8						; removing the format arg and one number from the stack
 				dec dword [link_counter]
-				cmp dword [link_counter], 0	; checking if finished printing
+				cmp dword [link_counter], 0		; checking if finished printing
 				jne print
 
 				call newLine_printer
@@ -272,8 +276,15 @@ switch:
 			operand_loop:
 				mov edx, 0					; zeroing edx
 				mov dh, byte [buffer+ecx]	; extracting current numbers to dx
+				cmp dh, '9'					; checking if it is a number or a letter
+				jg .letter
 				sub dh, '0'					; turning to number from ascii
+				jmp check_zero
 
+				.letter:
+					sub dh, 55				; reducing to match letter value in hex
+
+			check_zero:
 				cmp dh, 0
 				je zero
 				mov byte [zero_bool_stack+ebx], 1	; signaling not zero-something
@@ -282,17 +293,24 @@ switch:
 				mov byte [zero_bool_stack+ebx], 0	; signaling zero-something
 
 			continue:
-				cmp byte [buffer+ecx+1], 0xA; checking if there is an odd number of digits
+				cmp byte [buffer+ecx+1], 0xA		; checking if there is an odd number of digits
 				jne second_digit
-				shr edx, 8					; adjusting in case of odd number of digits
-				mov byte [eax], dl			; storing current numbers in the linked list
+				mov byte [zero_bool_stack+ebx], 1	; signaling not to add zero
+				shr edx, 8							; adjusting in case of odd number of digits
+				mov byte [eax], dl					; storing current numbers in the linked list
 				jmp end_loop
 
 			second_digit:
 				shr dx, 4					; adjusting the number 
 				add dl, byte [buffer+ecx+1]	; moving current numbers to edx
-				sub dx, '0'					; turning to number from ascii
+				cmp byte [buffer+ecx+1], '9'; checking if the second_digit is a letter
+				jg .letter			
+				sub dl, '0'					; turning to number from ascii
+				jmp continue_read_second	
+				.letter: 
+					sub dl, 55				; turning letter to actual hex value
 
+			continue_read_second:
 				cmp dl, 0						; checking if the whole number is 0
 				jne enter_to_link				; if not - continue normally
 				cmp byte [leading_zero_flag], 0	; check if there are leading zeros
@@ -372,5 +390,4 @@ switch:
 			mov esp, ebp 				; freeing func AF
 			pop ebp 					; restore AF of main
 			ret
-
 
