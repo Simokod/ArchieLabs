@@ -8,7 +8,7 @@ section	.rodata
 	stack_capacity EQU 5
 
 section .bss
-    buffer: resb 80            				; storing input
+    buffer: resb 82            				; storing input
 	stack: resd stack_capacity		 		; allocating 20 bytes for 5 pointers
 	zero_bool_stack: resb stack_capacity	; allocating 5 bytes for 5 booleans
 
@@ -19,6 +19,8 @@ section .data
 	link_counter: dd 0				; counter for the amount of link
 	leading_zero_flag: db 0			; flag for leading zero links
 	first_link_flag: db 0			; flag for printing the first link
+	one_bits_counter: dd 0			; counter for '1' bits
+	last_digit_one_bits: db 0		; save the right-most digit in one_bits function
 
 section .text
   	align 16
@@ -57,7 +59,7 @@ mycalc:
 		add esp, 8						; remove pushed argument
 
 		push dword [stdin]              ; reading from stdin
-		push 80                   		; max length
+		push 82                   		; max length
 		push buffer               		; input buffer
 		call fgets						; reading input
 		add esp, 12                     ; remove args from stack
@@ -75,8 +77,8 @@ switch:
 ;		je power
 ;		cmp byte [buffer], "v"
 ;		je negative_power
-;		cmp byte [buffer], "n"
-;		je one_bits
+		cmp byte [buffer], "n"
+		je one_bits
 
 		jmp operand
 
@@ -183,7 +185,7 @@ switch:
 				add esp, 8					; remove pushed argument
 
 				mov ebx, dword [current_size]		; putting current_size in ebx for memory addition
-				mov dword [stack+ebx*4], eax; storing pointer to linked list in the stack
+				mov dword [stack+ebx*4], eax 		; storing pointer to linked list in the stack
 
 				dec dword [link_counter]
 
@@ -232,28 +234,82 @@ switch:
 		count_bits:
 			mov ebx, dword [current_size] 	; for memory computation
 			mov eax, dword [stack+ebx*4-4]	; saving address of first link
+			mov dword [one_bits_counter], 0	; initiallizing counter for '1' bits
 
 			.loop:
-
 				mov edx, 8					; initiallizing edx to 8 for shr operations
 				mov ecx, 0					; zeroing ecx
 				mov cl, byte [eax]			; extracting actual number	
 
 				count_bits_loop:
-					shr ecx, 1 					; shr ecx in order to count '1' bits
-					add eax, 1
-					jmp count_bits_loop
+					shr ecx, 1 							; shr ecx in order to count '1' bits
+					jnc skip
+					inc dword [one_bits_counter]		 ; adding the carry-flag value to the counter
 
+				skip:
+					dec edx								; removing number of iterations left
+					cmp edx, 0							; checking if finished iteration
+					jne count_bits_loop
 
+				ready_next_link:
+					mov ebx, dword [eax+1]		; saving address to next link
 
+					push eax
+					call free 					; freeing memory of current link
+					add esp, 4
 
+					cmp ebx, 0					; checking if we reached the end of the link
+					je finish_one_bits
 
+					mov eax, ebx 				; saving address of next link in eax
+					jmp count_bits.loop
 
+				finish_one_bits:
+					cmp dword [one_bits_counter], 255	; checking if need 2 links or 1 is enough
+					jg handle_two_links
 
+					push 1									; size of char for calloc
+					push 5									; num of bytes to callocate (1 for digits + 4 for pointer)
+					call calloc								; allocating memory for the first link
+					add esp, 8								; remove pushed argument
 
+					mov ebx, dword [one_bits_counter]
+					mov [eax], ebx 							; storing the amount of one_bits in the link
+					mov ebx, dword [current_size]			; for memory computation
+					mov dword [stack+ebx*4-4], eax 			; pushing link to the stack instead of the old number
+					jmp main_loop
 
+				handle_two_links:
+					push 1						; size of char for calloc
+					push 5						; num of bytes to callocate (1 for digits + 4 for pointer)
+					call calloc					; allocating memory for the first link
+					add esp, 8					; remove pushed argument
+				after_first_calloc:
+					mov ebx, dword [one_bits_counter] 	; for computation purposes
+					shr ebx, 4 							; getting rid of the least significant digit
+					mov byte [eax], bl					; insert value in first link
+					mov dword [new_link_address], eax 	; save links address
 
+					mov eax, dword [one_bits_counter]	; for div computation purposes
+					mov edx, 0
+					mov ebx, 0x10						; for div computation purposes
+					DIV ebx
+					mov byte [last_digit_one_bits], dl	; saves digit for later use
 
+					push 1						; size of char for calloc
+					push 5						; num of bytes to callocate (1 for digits + 4 for pointer)
+					call calloc					; allocating memory for the second link
+					add esp, 8					; remove pushed argument
+
+				after_second_calloc:
+					mov ebx, dword [new_link_address]			; moving adress of old link to ebx
+					mov dword [eax+1], ebx 						; storing pointer to 2nd link in first link
+					mov ecx, dword [current_size]				; for computation purposes
+					mov dword [stack+ecx*4-4], eax 				; store pointer to link in the stack in the place of the old number
+
+					mov bl, byte [last_digit_one_bits]		; for computation purposes
+					mov byte [eax], bl 					; put the remaining value in the link
+					jmp main_loop
 
 		operand:
 			cmp dword [current_size], stack_capacity		; checking if stack is full
@@ -384,10 +440,31 @@ switch:
 ;		pop_operand_stack:
 
 		q_case:
+			cmp dword [current_size], 0
+			je quit
+
+			mov ebx, dword [current_size] 	; for memory computation
+			mov eax, dword [stack+ebx*4-4]	; saving address of first link
+
+			free_loop:
+				mov ebx, dword [eax+1]		; saving address to next link
+
+				push eax
+				call free 					; freeing memory of current link
+				add esp, 4
+
+				cmp ebx, 0					; checking if we reached the end of the link
+				je quit
+
+				mov eax, ebx 				; saving address of next link in eax
+				jmp free_loop
+
+			dec dword [current_size]		; decreasing amount of stacks in args
+			jmp q_case
+			
+		quit:
 			popad 						; restore registers
-																; TODO: free allocated memory
 			mov eax, [num_of_ops]		; return value
 			mov esp, ebp 				; freeing func AF
 			pop ebp 					; restore AF of main
 			ret
-
