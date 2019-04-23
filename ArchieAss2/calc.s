@@ -155,121 +155,95 @@ switch:
       jmp main_loop
 
     addition:
-      clc                             ; zeroing carry-flag for computation purposes
-      mov ebx, dword [current_size]   ; for computation purposes
-      mov ecx, dword [stack+ebx*4-4]  ; saving address of first linked list
-      mov edx, dword [stack+ebx*4-8]  ; saving address of second linked list
-      mov byte [carry_flag_value], 0  ; zeroing carry_flag_value
-      mov byte [first_link_flag], 1   ; initiallizing flag
+		mov ebx, dword [current_size]   ; for computation purposes
+		mov ecx, dword [stack+ebx*4-4]  ; saving address of first linked list
+		mov edx, dword [stack+ebx*4-8]  ; saving address of second linked list
+		mov byte [carry_flag_value], 0  ; zeroing carry_flag_value
 
-      .loop:
-        mov eax, 0
-        mov al, byte [ecx]                ; for computation purposes
-        mov byte [links_sum], al          ; saving value of first link
-        mov ebx, 0
-        mov bl, byte [carry_flag_value]   ; for computation purposes
-        add dword [links_sum], ebx        ; adding whats in the carry-flag from the last addition
+      	.loop:
+	        mov eax, 0
+	        mov al, byte [carry_flag_value]		; for computation purposes
+	        mov byte [carry_flag_value], 0		; zeroing cf-value
+	        add byte [edx], al 					; adding carry_flag_value to link
+	        adc byte [carry_flag_value], 0		; updating value of carry_flag_value
 
-        mov al, byte [edx]                ; for computation purposes
-        mov byte [carry_flag_value], 0    ; zeroing flag
-        add dword [links_sum], eax        ; adding second to first link
-        adc byte [carry_flag_value], 0    ; saving carry_flag_value for later use
+	        mov al, byte [ecx]                	; for computation purposes
+	        add byte [edx], al 					; summing value of both links
+	        adc byte [carry_flag_value], 0 		; updating value of carry_flag_value
 
-        pushad
-        push 1
-        push 5                                ; callocating memory for link
-        call calloc
-        add esp, 8
-        mov dword [new_link_address], eax
-        popad
+	        mov eax, [ecx+1]
+	        mov ebx, [edx+1]                      ; saving addresses of next links
 
-        mov eax, dword [new_link_address] 
-        mov ebx, dword [links_sum]
-        mov dword [eax], ebx                  ; storing sum of addition in the link
+	        pushad
+	        push ecx
+	        call free
+	        add esp, 4                            ; freeing first link memory
+	        popad
+	        
+	        cmp eax, 0						; checking if the first list is finished 
+	        jne check_second_list
 
-        cmp byte [first_link_flag], 1
-        jne .skip
-        mov dword [first_link_address], eax
-        mov byte [first_link_flag], 0
+	        cmp ebx, 0						; first list finished, now checking second list
+	        jne first_list_finished		 	; if second list is not finished, prepare its tail for chaining
 
-      .skip:
-        mov eax, [ecx+1]
-        mov ebx, [edx+1]                      ; saving addresses of next links
+	        mov ecx, edx 					; moving adress of last link to ecx for convention
+	        cmp byte [carry_flag_value], 1	; both lists finished, checking if there is carry left
+	        je create_carry_link			; if yes - create another link containing the carry
+	        jmp finish_sum					; if not - finish addition
 
-        pushad
-        push ecx
-        call free
-        add esp, 4                            ; freeing first link memory
-        popad
+	        second_list_finished:
+	        	mov ecx, eax 				; moving list to ecx for convention
+	        	mov dword [edx+1], eax		; moving the tail of the first list to the second list
+				jmp finish_tail
 
-        pushad
-        push edx
-        call free
-        add esp, 4                            ; freeing first link memory
-        popad
+	        first_list_finished:
+	        	mov ecx, ebx 				; moving adress of last link to ecx for convention
+				jmp finish_tail
 
-        cmp eax, 0
-        jne check_second_link
+	        check_second_list:				; first list not finished
+				cmp ebx, 0					; check if second list is finished
+				je second_list_finished		; if yes - chain the tail of the first list
 
-        cmp ebx, 0
-        jne prepare_ebx_list
-        jmp finish_sum
+				mov ecx, eax  				; if not - continue the addition with the next links
+				mov edx, ebx
+				jmp addition.loop
 
-        prepare_eax_list:
-          mov ecx, eax
-          jmp one_list
+      	finish_tail:
+			cmp byte [carry_flag_value], 1
+			jne finish_sum
 
-        prepare_ebx_list:
-          mov ecx, ebx
-          jmp one_list
+			add byte [ecx], 1					; adding carry-flag to link
+			mov ebx, dword [current_size] 		; for computation purposes
+			mov byte [zero_bool_stack+ebx-2], 0 ; signaling to print 2 zeros before the carry link
+			jnc finish_sum						; checking if there was overflow, if not - finish
 
-        check_second_link:
-          cmp ebx, 0
-          je prepare_eax_list
+			mov byte [carry_flag_value], 1      ; updating carry_flag_value
+			mov eax, dword [ecx+1]              ; saving next link address
+			cmp eax, 0                          ; checking if we finished the linked list
+			je create_carry_link                ; if yes - create a new link for the carry
 
-          mov ecx, eax
-          mov edx, ebx
-          jmp addition.loop
+			mov ecx, eax                        ; saving address of next link
+			jmp finish_tail
 
-      one_list:
-        mov dword [new_link_address+1], ecx     ; chaining tail of previous list to the new list
+		create_carry_link:
+			pushad
+			push 1
+			push 5                              ; callocating memory for link
+			call calloc
+			add esp, 8
+			mov dword [new_link_address], eax
+			popad
 
-        .loop:
-          cmp byte [carry_flag_value], 1
-          jne finish_sum
+			mov eax, dword [new_link_address]     ; for computation purposes
+			mov dword [ecx+1], eax                ; pointing last link to the created link
+			mov byte [eax], 1                     ; setting value to the new link
+			mov ebx, dword [current_size] 		  ; for computation purposes
+			mov byte [zero_bool_stack+ebx-2], 0   ; signaling to print 2 zeros before the carry link
+			jmp finish_sum
 
-          mov bl, byte [carry_flag_value]       ; for computation purposes
-          add byte [ecx], bl                    ; adding carry-flag to link
-          jnc finish_sum                        ; checking if there was overflow, if not - finish
-
-          mov byte [carry_flag_value], 1        ; updating carry_flag_value
-          mov eax, dword [ecx+1]                ; saving next link address
-          cmp eax, 0                            ; checking if we finished the linked list
-          je create_carry_link                  ; if yes - create a new link for the carry
-
-          mov ecx, eax                          ; saving address of next link
-          jmp .loop
-
-          create_carry_link:
-            pushad
-            push 1
-            push 5                                ; callocating memory for link
-            call calloc
-            add esp, 8
-            mov dword [new_link_address], eax
-            popad
-
-            mov eax, dword [new_link_address]     ; for computation purposes
-            mov dword [ecx+1], eax                ; pointing last link to the created link
-            mov byte [eax], 1                     ; setting value to the new link
-            jmp finish_sum
-
-      finish_sum:
-        dec dword [current_size]             ; reducing amount of items in the stack
-        mov ebx, [current_size]              ; for computation purposes
-        mov eax, dword [first_link_address]  ; for computation purposes
-        mov dword [stack+ebx*4-4], eax       ; storing linked list in the stack
-        jmp main_loop
+		finish_sum:
+			dec dword [current_size]             ; reducing amount of items in the stack
+			jmp main_loop
 
   ; create a copy of the number at the top of the stack and push it to the stack
   ; eax - address of current link, ebx - address of next link, ecx - value of link
@@ -293,22 +267,22 @@ switch:
 
   ; pushing data of links into stack
       .pop:       
-        mov ecx, 0          ; zeroing ecx
-        mov cl, byte [eax]      ; extracting actual number  
-        push ecx          ; pushing the actual number to the stack
-        inc dword [link_counter]  ; increasing link counted
-        mov ebx, dword [eax+1]    ; saving address to next link
+        mov ecx, 0          		; zeroing ecx
+        mov cl, byte [eax]      	; extracting actual number  
+        push ecx          			; pushing the actual number to the stack
+        inc dword [link_counter]  	; increasing link counted
+        mov ebx, dword [eax+1]    	; saving address to next link
 
-        cmp ebx, 0          ; checking if we reached the end of the link
+        cmp ebx, 0          		; checking if we reached the end of the link
         je actual_duplicate
 
-        mov eax, ebx        ; moving address of next link to eax
-        jmp .pop          ; continuing loop
+        mov eax, ebx        		; moving address of next link to eax
+        jmp .pop          			; continuing loop
 
   ; extracting pushed data to make the new linked list
       actual_duplicate:
-        push 1            ; size of char for calloc
-        push 5            ; num of bytes to callocate (1 for digits + 4 for pointer)
+        push 1            	; size of char for calloc
+        push 5            	; num of bytes to callocate (1 for digits + 4 for pointer)
         call calloc         ; allocating memory for the first link
         add esp, 8          ; remove pushed argument
 
@@ -318,30 +292,30 @@ switch:
         dec dword [link_counter]
 
         duplicate_loop:
-          pop ecx           ; storing data in ecx
-          mov byte [eax], cl      ; putting data in the new link
+          pop ecx           		; storing data in ecx
+          mov byte [eax], cl      	; putting data in the new link
 
-          mov ecx, dword [zero_bool_stack+ebx-1]      ; saving in ecx duplicated zero flag
+          mov ecx, dword [zero_bool_stack+ebx-1]    ; saving in ecx duplicated zero flag
           mov dword [zero_bool_stack+ebx], ecx      ; duplicating zero flag
 
           cmp dword [link_counter], 0           ; checking if we finished duplicating the linked list
           je end_duplicate
 
-          dec dword [link_counter]  ; decreasing amount of links left
-          mov edx, eax        ; saving address of previous link
+          dec dword [link_counter]  	; decreasing amount of links left
+          mov edx, eax        			; saving address of previous link
 
           pushad
-          push 1                  ; size of char for calloc
-          push 5                  ; num of bytes to callocate (1 for digits + 4 for pointer)
-          call calloc               ; allocating memory for the first link
-          add esp, 8                ; remove pushed argument
-          mov dword [new_link_address], eax   ; saving returned adress
+          push 1                  				; size of char for calloc
+          push 5                  				; num of bytes to callocate (1 for digits + 4 for pointer)
+          call calloc               			; allocating memory for the first link
+          add esp, 8                			; remove pushed argument
+          mov dword [new_link_address], eax   	; saving returned adress
           popad
 
           mov eax, dword [new_link_address] 
-          mov ebx, dword [current_size]     ; for memory computation
-          mov dword [stack+ebx*4], eax    ; pushing address of link on to the stack
-          mov [eax+1], edx          ; storing the next link address in current link
+          mov ebx, dword [current_size]     	; for memory computation
+          mov dword [stack+ebx*4], eax    		; pushing address of link on to the stack
+          mov [eax+1], edx          			; storing the next link address in current link
           jmp duplicate_loop
 
         end_duplicate:
@@ -350,13 +324,13 @@ switch:
 
   ; prints the amount of '1' bits in the number at the top of the stack
     one_bits:
-      inc dword [num_of_ops]      ; increasing number of operations done
+      inc dword [num_of_ops]      	; increasing number of operations done
       cmp dword [current_size], 0   ; making sure there is at least one number in the stack
-      je .not_enough_operands     ; if not - send error
+      je .not_enough_operands     	; if not - send error
       jmp count_bits
 
     .not_enough_operands:
-      call print_rator_error      ; not enough operands error
+      call print_rator_error      	; not enough operands error
       jmp main_loop
 
     count_bits:
@@ -365,18 +339,18 @@ switch:
       mov dword [one_bits_counter], 0 ; initiallizing counter for '1' bits
 
       .loop:
-        mov edx, 8          ; initiallizing edx to 8 for shr operations
-        mov ecx, 0          ; zeroing ecx
+        mov edx, 8          	; initiallizing edx to 8 for shr operations
+        mov ecx, 0          	; zeroing ecx
         mov cl, byte [eax]      ; extracting actual number  
 
         count_bits_loop:
-          shr ecx, 1              ; shr ecx in order to count '1' bits
+          shr ecx, 1 						; shr ecx in order to count '1' bits
           jnc skip
-          inc dword [one_bits_counter]     ; adding the carry-flag value to the counter
+          inc dword [one_bits_counter]     	; adding the carry-flag value to the counter
 
         skip:
-          dec edx               ; removing number of iterations left
-          cmp edx, 0              ; checking if finished iteration
+          dec edx               	; removing number of iterations left
+          cmp edx, 0              	; checking if finished iteration
           jne count_bits_loop
 
         ready_next_link:
@@ -454,7 +428,7 @@ switch:
         cmp byte [leading_zero_flag], 1  ; checking if we started reading the actual number
         jne read_actual_number
 
-        cmp byte [buffer+edx], 0         ; checking if current char is a '0'
+        cmp byte [buffer+edx], '0'         ; checking if current char is a '0'
         je read_leading_zero
         mov byte [leading_zero_flag], 0
 
@@ -468,7 +442,10 @@ switch:
         jmp count_digits.loop
 
     read_operand:
-      sub dl, byte [digit_counter]             ; saving number of leading zeros for later use
+      sub dl, byte [digit_counter]				; saving number of leading zeros for later use
+      cmp byte [digit_counter], 0				; checking if there where only zeros as input
+      je create_zero_link						; if yes - create a solo link containing zero
+
       mov byte [leading_zero_counter], dl      ; for later use
       mov eax, 0
       mov al, byte [digit_counter]             ; for computation purposes
@@ -487,37 +464,40 @@ switch:
       mov ebx, [current_size]           ; putting current_size in ebx for memory addition
       mov dword [stack+ebx*4], eax      ; storing pointer to linked list in the stack
 
-      mov edx, 0              ; zeroing edx
-      mov dl, byte [buffer]   ; reading first odd digit
-      cmp dl, '9'             ; checkinf if number or letter
+      mov ebx, 0
+      mov bl, byte [leading_zero_counter]
+      mov edx, 0              				; zeroing edx
+      mov dl, byte [buffer+ebx]   			; reading first odd digit
+      cmp dl, '9'             				; checkinf if number or letter
       jg .letter
-      sub dl, '0'             ; turning from ascii to actual value
+      sub dl, '0'             				; turning from ascii to actual value
       jmp enter_to_odd_link
 
       .letter:
-        sub dl, 55            ; turning from ascii to actual value
+        sub dl, 55            				; turning from ascii to actual value
 
       enter_to_odd_link:
-        mov byte [eax], dl                    ; storing current numbers in the linked list
+        mov byte [eax], dl                  ; storing current numbers in the linked list
         mov ecx, 0
-        mov cl, byte [leading_zero_counter]   ; increasing index of buffer by amount of leading zeros
-        inc ecx                               ; increasing index of input buffer
+        mov cl, byte [leading_zero_counter] ; increasing index of buffer by amount of leading zeros
+        inc ecx                             ; increasing index of input buffer
 
-        cmp byte [buffer+ecx], 0xA    ; check if finished reading the number
-        je end_loop                   ; if yes - finish
+        cmp byte [buffer+ecx], 0xA    		; check if finished reading the number
+        je end_loop                   		; if yes - finish
 
-        mov edx, eax              ; saving address of previous link
-        pushad                  ; backup registers
-        push 1                  ; size of char for calloc
-        push 5                  ; num of bytes to callocate (1 for digits + 4 for pointer)
-        call calloc               ; allocating memory for next link
-        add esp, 8                ; remove pushed argument
+        mov edx, eax              			; saving address of previous link
+        pushad                  			; backup registers
+        push 1                  			; size of char for calloc
+        push 5                  			; num of bytes to callocate (1 for digits + 4 for pointer)
+        call calloc               			; allocating memory for next link
+        add esp, 8 							; remove pushed argument
         mov dword [new_link_address], eax   ; saving returned adress
-        popad                   ; restore registers
+        popad                   			; restore registers
 
         mov eax, dword [new_link_address]   ; for memory access computation management
-        mov dword [stack+ebx*4], eax      ; storing pointer to linked list in the stack
-        mov [eax+1], edx            ; storing the next link address in current link
+        mov ebx, [current_size]				; for computation purposes
+        mov dword [stack+ebx*4], eax 		; storing pointer to linked list in the stack
+        mov [eax+1], edx            		; storing the next link address in current link
         jmp operand_loop
 
     read_operand_even:
@@ -529,102 +509,117 @@ switch:
       mov ebx, [current_size]           ; putting current_size in ebx for memory addition
       mov dword [stack+ebx*4], eax      ; storing pointer to linked list in the stack
 
+      mov ecx, 0
       mov cl, byte [leading_zero_counter]  ; initiallizing ecx as input index
-      mov byte [leading_zero_flag], 1       ; initiallizing flag to true
+      mov byte [leading_zero_flag], 1      ; initiallizing flag to true
 
       operand_loop:
-        mov edx, 0          ; zeroing edx
-        mov dh, byte [buffer+ecx] ; extracting current numbers to dx
-        cmp dh, '9'         ; checking if it is a number or a letter
+        mov edx, 0          			; zeroing edx
+        mov dh, byte [buffer+ecx] 		; extracting current numbers to dx
+        cmp dh, '9'         			; checking if it is a number or a letter
         jg .letter
-        sub dh, '0'         ; turning to number from ascii
+        sub dh, '0'         			; turning to number from ascii
         jmp check_zero
 
         .letter:
-          sub dh, 55        ; reducing to match letter value in hex
+          sub dh, 55        			; reducing to match letter value in hex
 
       check_zero:
         cmp dh, 0
         je zero
-        mov byte [zero_bool_stack+ebx], 1 ; signaling not zero-something
+        mov byte [zero_bool_stack+ebx], 1 	; signaling not zero-something
         jmp continue
       zero:
-        mov byte [zero_bool_stack+ebx], 0 ; signaling zero-something
+        mov byte [zero_bool_stack+ebx], 0 	; signaling zero-something
 
       continue:
-        cmp byte [buffer+ecx+1], 0xA    ; checking if there is an odd number of digits
+        cmp byte [buffer+ecx+1], 0xA    	; checking if there is an odd number of digits
         jne second_digit
-        mov byte [zero_bool_stack+ebx], 1 ; signaling not to add zero
-        shr edx, 8              ; adjusting in case of odd number of digits
-        mov byte [eax], dl          ; storing current numbers in the linked list
+        mov byte [zero_bool_stack+ebx], 1 	; signaling not to add zero
+        shr edx, 8              			; adjusting in case of odd number of digits
+        mov byte [eax], dl          		; storing current numbers in the linked list
         jmp end_loop
 
       second_digit:
-        shr dx, 4         ; adjusting the number 
-        add dl, byte [buffer+ecx+1] ; moving current numbers to edx
-        cmp byte [buffer+ecx+1], '9'; checking if the second_digit is a letter
+        shr dx, 4         				; adjusting the number 
+        add dl, byte [buffer+ecx+1] 	; moving current numbers to edx
+        cmp byte [buffer+ecx+1], '9'	; checking if the second_digit is a letter
         jg .letter      
-        sub dl, '0'         ; turning to number from ascii
+        sub dl, '0'         			; turning to number from ascii
         jmp continue_read_second  
         .letter: 
-          sub dl, 55        ; turning letter to actual hex value
+          sub dl, 55        			; turning letter to actual hex value
 
       continue_read_second:
-        cmp dl, 0           ; checking if the whole number is 0
-        jne enter_to_link       ; if not - continue normally
+        cmp dl, 0           			; checking if the whole number is 0
+        jne enter_to_link       		; if not - continue normally
         cmp byte [leading_zero_flag], 0 ; check if there are leading zeros
-        je enter_to_link        ; if not - continue normally
+        je enter_to_link        		; if not - continue normally
 
-        inc ecx           ; increase input index
+        inc ecx           				; increase input index
         inc ecx 
-        jmp operand_loop      ; continue reading
+        jmp operand_loop      			; continue reading
 
       enter_to_link:
         mov byte [leading_zero_flag], 0 ; no leading zeros from this point
-        mov byte [eax], dl        ; storing current numbers in the linked list
+        mov byte [eax], dl        		; storing current numbers in the linked list
 
         inc ecx             ; increasing index of input buffer
         inc ecx             ; same
 
-        cmp byte [buffer+ecx], 0xA    ; check if finished reading the number
-        je end_loop           ; if yes - finish
+        cmp byte [buffer+ecx], 0xA    	; check if finished reading the number
+        je end_loop           			; if yes - finish
 
-        mov edx, eax              ; saving address of previous link
-        pushad                  ; backup registers
-        push 1                  ; size of char for calloc
-        push 5                  ; num of bytes to callocate (1 for digits + 4 for pointer)
-        call calloc               ; allocating memory for next link
-        add esp, 8                ; remove pushed argument
+        mov edx, eax              	; saving address of previous link
+        pushad                  	; backup registers
+        push 1                  	; size of char for calloc
+        push 5                  	; num of bytes to callocate (1 for digits + 4 for pointer)
+        call calloc               			; allocating memory for next link
+        add esp, 8                			; remove pushed argument
         mov dword [new_link_address], eax   ; saving returned adress
-        popad                   ; restore registers
+        popad                   			; restore registers
 
         mov eax, dword [new_link_address]   ; for memory access computation management
-        mov dword [stack+ebx*4], eax      ; storing pointer to linked list in the stack
-        mov [eax+1], edx            ; storing the next link address in current link
+        mov dword [stack+ebx*4], eax      	; storing pointer to linked list in the stack
+        mov [eax+1], edx            		; storing the next link address in current link
         jmp operand_loop
 
-      end_loop:
+	end_loop:
         inc dword [current_size]          ; increasing amount of items in the stack
         jmp main_loop
 
+    create_zero_link:
+		push 1              ; size of char for calloc
+      	push 5              ; num of bytes to callocate (1 for digits + 4 for pointer)
+      	call calloc         ; allocating memory for the first link
+      	add esp, 8          ; remove pushed argument
+
+     	mov ebx, [current_size]             ; putting current_size in ebx for memory addition
+      	mov dword [stack+ebx*4], eax        ; storing pointer to linked list in the stack
+		inc dword [current_size]			; increasing amount of numbers in the stack
+
+      	mov byte [eax], 0					; inserting 0 in the link
+      	jmp main_loop
+
+
     print_rator_error:
-      pushad            ; backup registers
+      pushad            		; backup registers
 
-      push args_error       ; pushing error message
-      push format_string      ; pushing format
-      call printf         ; printing error messsage
-      add esp, 8          ; remove args from stack
+      push args_error       	; pushing error message
+      push format_string      	; pushing format
+      call printf         		; printing error messsage
+      add esp, 8          		; remove args from stack
 
-      popad             ; restore registers
+      popad             		; restore registers
       ret
 
     print_operand_error:
       pushad
 
-      push operand_error      ; pushing error message
-      push format_string      ; pushing format
-      call printf         ; printing error messsage
-      add esp, 8          ; remove args from stack
+      push operand_error    ; pushing error message
+      push format_string    ; pushing format
+      call printf         	; printing error messsage
+      add esp, 8          	; remove args from stack
 
       popad
       ret
@@ -633,9 +628,9 @@ switch:
       pushad
 
       push newLine
-      push format_string      ; new line
+      push format_string    ; new line
       call printf
-      add esp, 8          ; removing args
+      add esp, 8          	; removing args
 
       popad
       ret
@@ -650,7 +645,7 @@ switch:
       mov eax, dword [stack+ebx*4-4]  ; saving address of first link
 
       free_loop:
-        mov ebx, dword [eax+1]    ; saving address to next link
+        mov ebx, dword [eax+1]    	; saving address to next link
 
         push eax
         call free           ; freeing memory of current link
