@@ -7,6 +7,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <errno.h>
+#include <signal.h>
 
 #define TERMINATED  -1
 #define RUNNING 1
@@ -31,7 +32,7 @@ void change_dir(cmdLine *pCmdLine){
 		perror("cd error");
 }
 void addProcess(process** process_list, cmdLine* cmd, pid_t pid) {
-	process *proc = malloc(sizeof(cmd) + sizeof(pid_t) + sizeof(int) + sizeof(process));
+	process *proc = malloc(sizeof(process));
 	proc->cmd = cmd;
 	proc->pid = pid;
 	proc->status = RUNNING;
@@ -57,11 +58,17 @@ void updateProcessStatus(process* process_list, int pid, int status){
 }
 void updateProcessList(process **process_list){
 	process *curr_process = *process_list;
-	int *wstatus;
+	int wstatus;
 	while(curr_process != NULL){
-		if(waitpid((*process_list)->pid, wstatus, WNOHANG) == -1)
-			if(WIFSIGNALED(*wstatus) || WIFEXITED(*wstatus))
-				updateProcessStatus(*process_list, (*process_list)->pid, TERMINATED);
+		if(curr_process->status != -1){
+			if(waitpid(curr_process->pid, &wstatus, WNOHANG) && (WIFEXITED(wstatus) || WIFSTOPPED(wstatus))) {
+				curr_process->status = TERMINATED;
+			}
+			else{
+				if(errno == ECHILD)
+					printf("no child exists\n");
+			}
+		}
 		curr_process = curr_process->next;
 	}
 }
@@ -90,14 +97,15 @@ void printProcessList(process** process_list) {
 							free(curr_process);
 						}
 						break;
-			case(0): 	printf("Suspended\t\t");
+			case(0): 	printf("Suspended\t");
 						break;
 			case(1):	printf("Running\t\t");
 						break;
 			default:;
 		}
-		for(j=0;j<curr_process->cmd->argCount;j++)
-			printf("%s ", curr_process->cmd->arguments[j]);
+		if(curr_process->status != -1)
+			for(j=0;j<curr_process->cmd->argCount;j++)
+				printf("%s ", curr_process->cmd->arguments[j]);
 		printf("\n");
 		index++;
 		prev_process = curr_process;
@@ -158,12 +166,24 @@ int main(int argc, char **argv) {
 			case 3:	printProcessList(process_list); 	// procs
 					freeCmdLines(pCmdLine);
 					break;
-			case 4: if(kill(strtol(pCmdLine->arguments[1], NULL, 10), SIGTSTP) == 0)		// suspend
-					update
+			case 4: if(kill(strtol(pCmdLine->arguments[1], NULL, 10), SIGTSTP) == -1)		// suspend
+						perror("suspend error");
+					else{
+						updateProcessStatus(*process_list, strtol(pCmdLine->arguments[1], NULL, 10), SUSPENDED);
+						freeCmdLines(pCmdLine);
+					}
 					break;
-			case 5: if(kill(strtol(pCmdLine->arguments[1], NULL, 10), SIGINT) == 0)			// kill
+			case 5: if(kill(strtol(pCmdLine->arguments[1], NULL, 10), SIGINT) == -1)		// kill
+						perror("kill error");
+					else
+						freeCmdLines(pCmdLine);
 					break;
-			case 6:	if(kill(strtol(pCmdLine->arguments[1], NULL, 10), SIGCONT) == 0)		// wake
+			case 6:	if(kill(strtol(pCmdLine->arguments[1], NULL, 10), SIGCONT) == -1)		// wake
+						perror("wake error");
+					else{
+						updateProcessStatus(*process_list, strtol(pCmdLine->arguments[1], NULL, 10), RUNNING);
+						freeCmdLines(pCmdLine);
+					}
 					break;
 			default:
 				if(!(pid=fork())){
