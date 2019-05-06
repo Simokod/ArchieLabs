@@ -86,30 +86,40 @@ void printProcessList(process** process_list) {
 		printf("%d\t\t", curr_process->pid);
 		switch (curr_process->status) {
 			case(-1): 	printf("Terminated\t");
+						for(j=0;j<curr_process->cmd->argCount;j++)
+							printf("%s ", curr_process->cmd->arguments[j]);
 						if(prev_process == NULL){
 							freeCmdLines(curr_process->cmd);
 							*process_list = curr_process->next;
 							free(curr_process);
+							if(process_list == NULL)
+								curr_process = NULL;
+							else
+								curr_process = *process_list;
 						}
 						else {
 							freeCmdLines(curr_process->cmd);
 							prev_process->next = curr_process->next;
 							free(curr_process);
+							curr_process = prev_process->next;
 						}
 						break;
 			case(0): 	printf("Suspended\t");
+						for(j=0;j<curr_process->cmd->argCount;j++)
+							printf("%s ", curr_process->cmd->arguments[j]);
+						prev_process = curr_process;
+						curr_process = curr_process->next;
 						break;
 			case(1):	printf("Running\t\t");
+						for(j=0;j<curr_process->cmd->argCount;j++)
+							printf("%s ", curr_process->cmd->arguments[j]);
+						prev_process = curr_process;
+						curr_process = curr_process->next;
 						break;
 			default:;
 		}
-		if(curr_process->status != -1)
-			for(j=0;j<curr_process->cmd->argCount;j++)
-				printf("%s ", curr_process->cmd->arguments[j]);
 		printf("\n");
 		index++;
-		prev_process = curr_process;
-		curr_process = curr_process->next;
 	}
 }
 // converts input string to number for switch case
